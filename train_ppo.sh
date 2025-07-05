@@ -1,0 +1,1 @@
+poetry run python -m ball_and_stick_rl.ppo

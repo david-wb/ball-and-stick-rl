@@ -1,0 +1,5 @@
+checkpoints/
+tensorboard/
+wandb/
+*.zip
+wandb_models/
