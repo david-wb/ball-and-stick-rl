@@ -162,7 +162,7 @@ class SphericalPendulumEnv(gym.Env):
         velocity_penalty = -1.0 * (vel_error / max_vel_error)
         control_penalty = -0.01 * np.sum(np.square(action))
 
-        reward = float(10 * upright_reward + velocity_penalty + control_penalty)
+        reward = float(2 * upright_reward + velocity_penalty + control_penalty)
         terminated = bool(z_axis[2] < 0.1)  # Relaxed termination condition
 
         truncated = False
@@ -182,7 +182,8 @@ class SphericalPendulumEnv(gym.Env):
             truncated,
             {
                 "upright_reward": upright_reward,
-                "velocity_reward": velocity_penalty,
+                "velocity_penalty": velocity_penalty,
+                "velocity_error": vel_error,
                 "control_penalty": control_penalty,
             },
         )
@@ -404,6 +405,7 @@ class CustomSAC:
                     "obs_mean": np.mean(obs),
                     "obs_std": np.std(obs),
                     "timestep": timestep,
+                    **info,
                 }
             )
 
@@ -546,7 +548,7 @@ if __name__ == "__main__":
     env = SphericalPendulumEnv(max_steps=2048, randomize_velocity=True)
     model = CustomSAC(
         env,
-        learning_rate=3e-4,
+        learning_rate=2e-4,
         buffer_size=2_000_000,
         batch_size=128,
         gamma=0.99,
