@@ -1,6 +1,6 @@
 # ball-and-stick-rl
 
-<img src="static/balancing.gif" alt="Viewer" width="1000">
+<img src="static/ball_and_stick.gif" alt="Viewer" width="1000">
 
 # Overview
 
