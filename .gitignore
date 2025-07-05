@@ -3,3 +3,4 @@ tensorboard/
 wandb/
 *.zip
 wandb_models/
+__pycache__/
