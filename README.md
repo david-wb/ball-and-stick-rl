@@ -1,6 +1,9 @@
 # ball-and-stick-rl
 
-<img src="static/ball_and_stick.gif" alt="Viewer" width="1000">
+<!-- <img src="static/ball_and_stick.gif" alt="Viewer" width="1000"> -->
+
+<video src="static/ball_and_stick.mp4" controls="controls" style="max-width: 730px;" autoplay="autoplay">
+</video>
 
 # Overview
 
