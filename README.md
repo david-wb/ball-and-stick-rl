@@ -36,7 +36,7 @@ To visualize a trained model in MuJoCo run
 
 # To Launch Viewer
 
-To launch viewer the ball-and-stick model imported run
+To launch the MuJoCoviewer and imported the ball-and-stick, run
 
 ```bash
 ./viewer.sh
