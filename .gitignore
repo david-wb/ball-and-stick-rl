@@ -4,3 +4,4 @@ wandb/
 *.zip
 wandb_models/
 __pycache__/
+MUJOCO_LOG.TXT
