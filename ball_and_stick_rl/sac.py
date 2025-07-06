@@ -212,13 +212,13 @@ class ReplayBuffer:
 
         # Store sequences
         self.observations = np.zeros((capacity, seq_len, obs_dim), dtype=np.float32)
-        self.hiddens = np.zeros((capacity, 1, hidden_dim), dtype=np.float32)
+        self.hiddens = np.zeros((capacity, seq_len, 1, hidden_dim), dtype=np.float32)
         self.actions = np.zeros((capacity, seq_len, act_dim), dtype=np.float32)
         self.rewards = np.zeros((capacity, seq_len), dtype=np.float32)
         self.next_observations = np.zeros(
             (capacity, seq_len, obs_dim), dtype=np.float32
         )
-        self.next_hiddens = np.zeros((capacity, 1, hidden_dim), dtype=np.float32)
+        self.next_hiddens = np.zeros((capacity, seq_len, 1, hidden_dim), dtype=np.float32)
         self.dones = np.zeros((capacity, seq_len), dtype=np.bool_)
         self.masks = np.ones(
             (capacity, seq_len), dtype=np.float32
@@ -229,24 +229,27 @@ class ReplayBuffer:
 
     def push(self, obs, hidden, act, rew, next_obs, next_hidden, done, truncate):
         if self.seq_index < self.seq_len:
+            if self.seq_index == 0:
+                # Initialize the sequence at the start of a new episode
+                self.observations[self.index] = 0
+                self.hiddens[self.index] = 0
+                self.actions[self.index] = 0
+                self.rewards[self.index] = 0
+                self.next_observations[self.index] = 0
+                self.next_hiddens[self.index] = 0
+                self.dones[self.index] = True
+                self.masks[self.index] = 0
+
             self.observations[self.index][self.seq_index] = obs
-            self.hiddens[self.index] = hidden
+            self.hiddens[self.index][self.seq_index] = hidden
             self.actions[self.index][self.seq_index] = act
             self.rewards[self.index][self.seq_index] = rew
             self.next_observations[self.index][self.seq_index] = next_obs
-            self.next_hiddens[self.index] = next_hidden
+            self.next_hiddens[self.index][self.seq_index] = next_hidden
             self.dones[self.index][self.seq_index] = done
             self.masks[self.index][self.seq_index] = 1.0
 
         if self.seq_index + 1 >= self.seq_len or done or truncate:
-            # Pad remaining steps if sequence is incomplete
-            for i in range(self.seq_index + 1, self.seq_len):
-                self.observations[self.index][i] = 0
-                self.actions[self.index][i] = 0
-                self.rewards[self.index][i] = 0
-                self.next_observations[self.index][i] = 0
-                self.dones[self.index][i] = True
-                self.masks[self.index][i] = 0.0
             self.index = (self.index + 1) % self.capacity
             self.size = min(self.size + 1, self.capacity)
             self.seq_index = 0
@@ -499,8 +502,8 @@ class CustomSAC:
             batch_mask,
         ) = self.replay_buffer.sample(self.batch_size)
 
-        batch_hidden = batch_hidden.permute(1, 0, 2)
-        batch_next_hidden = batch_next_hidden.permute(1, 0, 2)
+        batch_hidden = batch_hidden[:, 0].permute(1, 0, 2)
+        batch_next_hidden = batch_next_hidden[:, 0].permute(1, 0, 2)
 
         # Q-network updates
         with torch.no_grad():
@@ -512,20 +515,10 @@ class CustomSAC:
             target_q2 = self.target_q2(batch_next_obs, next_action)
             target_q = torch.min(target_q1, target_q2) - self.alpha * next_log_prob
 
-            # Compute target Q-values with discounting over sequence
-            target = torch.zeros_like(target_q)
-            discounts = self.gamma ** torch.arange(
-                self.seq_len, device=target.device
-            ).float().view(1, self.seq_len, 1)
+            # Compute target Q-values with uniform discounting
             not_dones = (1 - batch_done.unsqueeze(-1)) * batch_mask.unsqueeze(-1)
             rewards = batch_rew.unsqueeze(-1) * batch_mask.unsqueeze(-1)
-            target[:, :-1, :] = (rewards[:, :-1, :] * discounts[:, :-1, :]) + (
-                not_dones[:, :-1, :] * discounts[:, :-1, :] * target_q[:, 1:, :]
-            )
-            target[:, -1, :] = (
-                rewards[:, -1, :]
-                + not_dones[:, -1, :] * self.gamma * target_q[:, -1, :]
-            )
+            target = rewards + not_dones * self.gamma * target_q
 
         q1_pred = self.q1(batch_obs, batch_act)
         q2_pred = self.q2(batch_obs, batch_act)
@@ -592,7 +585,7 @@ if __name__ == "__main__":
         alpha=0.3,
         hidden_size=32,
         num_layers=1,
-        seq_len=1,
+        seq_len=32,
         device="cpu",
     )
     run = wandb.init(
