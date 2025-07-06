@@ -52,4 +52,4 @@ The training metrics are logged to https://wanb.ai
 
 For SAC they look something like this:
 
-<img src="static/wandb.png" alt="SAC Metrics" width="600">
+<img src="static/training_metrics.png" alt="SAC Metrics" width="600">

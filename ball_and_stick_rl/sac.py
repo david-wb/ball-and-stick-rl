@@ -202,29 +202,59 @@ class SphericalPendulumEnv(gym.Env):
 
 
 class ReplayBuffer:
-    def __init__(self, capacity, obs_dim, act_dim, hidden_dim, device):
+    def __init__(self, capacity, obs_dim, act_dim, hidden_dim, seq_len, device):
         self.capacity = capacity
-        self.observations = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.hiddens = np.zeros((capacity, 1, hidden_dim), dtype=np.float32)
-        self.actions = np.zeros((capacity, act_dim), dtype=np.float32)
-        self.rewards = np.zeros(capacity, dtype=np.float32)
-        self.next_observations = np.zeros((capacity, obs_dim), dtype=np.float32)
-        self.next_hiddens = np.zeros((capacity, 1, hidden_dim), dtype=np.float32)
-        self.dones = np.zeros(capacity, dtype=np.bool_)
-        self.index = 0
-        self.size = 0
+        self.seq_len = seq_len
+        self.obs_dim = obs_dim
+        self.act_dim = act_dim
+        self.hidden_dim = hidden_dim
         self.device = device
 
-    def push(self, obs, hidden, act, rew, next_obs, next_hidden, done):
-        self.observations[self.index] = obs
-        self.hiddens[self.index] = hidden
-        self.actions[self.index] = act
-        self.rewards[self.index] = rew
-        self.next_observations[self.index] = next_obs
-        self.next_hiddens[self.index] = next_hidden
-        self.dones[self.index] = done
-        self.index = (self.index + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
+        # Store sequences
+        self.observations = np.zeros((capacity, seq_len, obs_dim), dtype=np.float32)
+        self.hiddens = np.zeros((capacity, seq_len, 1, hidden_dim), dtype=np.float32)
+        self.actions = np.zeros((capacity, seq_len, act_dim), dtype=np.float32)
+        self.rewards = np.zeros((capacity, seq_len), dtype=np.float32)
+        self.next_observations = np.zeros(
+            (capacity, seq_len, obs_dim), dtype=np.float32
+        )
+        self.next_hiddens = np.zeros((capacity, seq_len, 1, hidden_dim), dtype=np.float32)
+        self.dones = np.zeros((capacity, seq_len), dtype=np.bool_)
+        self.masks = np.ones(
+            (capacity, seq_len), dtype=np.float32
+        )  # Mask for valid transitions
+        self.index = 0
+        self.seq_index = 0
+        self.size = 0
+
+    def push(self, obs, hidden, act, rew, next_obs, next_hidden, done, truncate):
+        if self.seq_index < self.seq_len:
+            if self.seq_index == 0:
+                # Initialize the sequence at the start of a new episode
+                self.observations[self.index] = 0
+                self.hiddens[self.index] = 0
+                self.actions[self.index] = 0
+                self.rewards[self.index] = 0
+                self.next_observations[self.index] = 0
+                self.next_hiddens[self.index] = 0
+                self.dones[self.index] = True
+                self.masks[self.index] = 0
+
+            self.observations[self.index][self.seq_index] = obs
+            self.hiddens[self.index][self.seq_index] = hidden
+            self.actions[self.index][self.seq_index] = act
+            self.rewards[self.index][self.seq_index] = rew
+            self.next_observations[self.index][self.seq_index] = next_obs
+            self.next_hiddens[self.index][self.seq_index] = next_hidden
+            self.dones[self.index][self.seq_index] = done
+            self.masks[self.index][self.seq_index] = 1.0
+
+        if self.seq_index + 1 >= self.seq_len or done or truncate:
+            self.index = (self.index + 1) % self.capacity
+            self.size = min(self.size + 1, self.capacity)
+            self.seq_index = 0
+        else:
+            self.seq_index += 1
 
     def sample(self, batch_size):
         indices = np.random.randint(0, self.size, size=batch_size)
@@ -236,6 +266,7 @@ class ReplayBuffer:
             torch.FloatTensor(self.next_observations[indices]).to(self.device),
             torch.FloatTensor(self.next_hiddens[indices]).to(self.device),
             torch.FloatTensor(self.dones[indices]).to(self.device),
+            torch.FloatTensor(self.masks[indices]).to(self.device),
         )
 
 
@@ -266,7 +297,6 @@ class PolicyNetwork(nn.Module):
         if hidden is None:
             hidden = self.init_hidden(obs.size(0)).to(obs.device)
         gru_out, new_hidden = self.gru(obs, hidden)
-        gru_out = gru_out[:, -1, :]  # Use last time step: (batch_size, hidden_size)
         mean = self.actor_mean(gru_out) * self.action_scale.to(gru_out.device)
         log_std = self.actor_log_std.expand_as(mean)
         std = torch.exp(log_std)
@@ -290,8 +320,17 @@ class QNetwork(nn.Module):
         )
 
     def forward(self, obs, act):
+        reshape = False
+        if obs.dim() == 3:  # (batch_size, seq_len, obs_dim)
+            reshape = True
+            batch_size, seq_len, _ = obs.size()
+            obs = obs.view(-1, obs.size(-1))  # (batch_size * seq_len, obs_dim)
+            act = act.view(-1, act.size(-1))  # (batch_size * seq_len, act_dim)
         x = torch.cat([obs, act], dim=-1)
-        return self.network(x)
+        q_values = self.network(x)
+        if reshape:
+            q_values = q_values.view(batch_size, seq_len, 1)  # (batch_size, seq_len, 1)
+        return q_values
 
 
 class CustomSAC:
@@ -306,6 +345,7 @@ class CustomSAC:
         alpha=0.3,
         hidden_size=32,
         num_layers=1,
+        seq_len=100,
         device="cpu",
     ):
         self.env = env
@@ -316,10 +356,11 @@ class CustomSAC:
         self.batch_size = batch_size
         self.gamma = gamma
         self.tau = tau
-        self.alpha = alpha  # Initial entropy coefficient
+        self.alpha = alpha
         self.device = torch.device(device)
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.seq_len = seq_len
 
         # Initialize networks
         self.policy = PolicyNetwork(
@@ -349,6 +390,7 @@ class CustomSAC:
             self.obs_dim,
             self.act_dim,
             self.hidden_size,
+            seq_len,
             device=self.device,
         )
 
@@ -381,7 +423,6 @@ class CustomSAC:
                 mean, std, next_hidden = self.policy(obs_tensor, hidden)
                 dist = Normal(mean, std)
                 action = dist.sample()
-                log_prob = dist.log_prob(action).sum(dim=-1)
                 action_np = action.cpu().detach().numpy()[0]
                 next_obs, reward, terminated, truncated, info = self.env.step(action_np)
                 done = terminated
@@ -395,6 +436,7 @@ class CustomSAC:
                     next_obs,
                     next_hidden.cpu().detach().numpy()[:, 0, :],
                     done,
+                    truncated,
                 )
 
             # Log metrics
@@ -446,7 +488,6 @@ class CustomSAC:
                 print(f"Saved model checkpoint to: {save_file}")
 
     def _update_networks(self):
-        # Perform SAC updates if enough data in buffer
         if self.replay_buffer.size < self.batch_size:
             return
 
@@ -458,34 +499,31 @@ class CustomSAC:
             batch_next_obs,
             batch_next_hidden,
             batch_done,
+            batch_mask,
         ) = self.replay_buffer.sample(self.batch_size)
 
-        batch_hidden = batch_hidden.permute(1, 0, 2)
-        batch_next_hidden = batch_next_hidden.permute(1, 0, 2)
-
-        # Compute alpha
-        alpha = self.alpha
+        batch_hidden = batch_hidden[:, 0].permute(1, 0, 2)
+        batch_next_hidden = batch_next_hidden[:, 0].permute(1, 0, 2)
 
         # Q-network updates
         with torch.no_grad():
-            next_mean, next_std, _ = self.policy(
-                batch_next_obs.unsqueeze(1), batch_next_hidden
-            )
+            next_mean, next_std, _ = self.policy(batch_next_obs, batch_next_hidden)
             next_dist = Normal(next_mean, next_std)
             next_action = next_dist.sample()
             next_log_prob = next_dist.log_prob(next_action).sum(dim=-1, keepdim=True)
             target_q1 = self.target_q1(batch_next_obs, next_action)
             target_q2 = self.target_q2(batch_next_obs, next_action)
-            target_q = torch.min(target_q1, target_q2) - alpha * next_log_prob
-            target = (
-                batch_rew.unsqueeze(1)
-                + (1 - batch_done.unsqueeze(1)) * self.gamma * target_q
-            )
+            target_q = torch.min(target_q1, target_q2) - self.alpha * next_log_prob
+
+            # Compute target Q-values with uniform discounting
+            not_dones = (1 - batch_done.unsqueeze(-1)) * batch_mask.unsqueeze(-1)
+            rewards = batch_rew.unsqueeze(-1) * batch_mask.unsqueeze(-1)
+            target = rewards + not_dones * self.gamma * target_q
 
         q1_pred = self.q1(batch_obs, batch_act)
         q2_pred = self.q2(batch_obs, batch_act)
-        q1_loss = nn.MSELoss()(q1_pred, target)
-        q2_loss = nn.MSELoss()(q2_pred, target)
+        q1_loss = ((q1_pred - target) ** 2 * batch_mask.unsqueeze(-1)).mean()
+        q2_loss = ((q2_pred - target) ** 2 * batch_mask.unsqueeze(-1)).mean()
 
         self.q1_optimizer.zero_grad()
         q1_loss.backward()
@@ -496,27 +534,18 @@ class CustomSAC:
         self.q2_optimizer.step()
 
         # Policy update
-        mean, std, _ = self.policy(batch_obs.unsqueeze(1), batch_hidden)
+        mean, std, _ = self.policy(batch_obs, batch_hidden)
         dist = Normal(mean, std)
         action = dist.rsample()
         log_prob = dist.log_prob(action).sum(dim=-1, keepdim=True)
         q1_pi = self.q1(batch_obs, action)
         q2_pi = self.q2(batch_obs, action)
         q_pi = torch.min(q1_pi, q2_pi)
-        policy_loss = (alpha * log_prob - q_pi).mean()
+        policy_loss = ((self.alpha * log_prob - q_pi) * batch_mask.unsqueeze(-1)).mean()
 
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
         self.policy_optimizer.step()
-
-        # # Alpha update
-        # alpha_loss = -(
-        #     self.log_alpha * (log_prob + self.target_entropy).detach()
-        # ).mean()
-
-        # self.alpha_optimizer.zero_grad()
-        # alpha_loss.backward()
-        # self.alpha_optimizer.step()
 
         # Update target networks
         self.update_target_networks()
@@ -527,7 +556,7 @@ class CustomSAC:
                 "q1_loss": q1_loss.item(),
                 "q2_loss": q2_loss.item(),
                 "policy_loss": policy_loss.item(),
-                "alpha": alpha,
+                "alpha": self.alpha,
             }
         )
 
@@ -549,13 +578,14 @@ if __name__ == "__main__":
     model = CustomSAC(
         env,
         learning_rate=2e-4,
-        buffer_size=2_000_000,
+        buffer_size=100_000,
         batch_size=128,
         gamma=0.99,
         tau=0.005,
         alpha=0.3,
         hidden_size=32,
         num_layers=1,
+        seq_len=32,
         device="cpu",
     )
     run = wandb.init(
@@ -572,6 +602,7 @@ if __name__ == "__main__":
             "alpha": model.alpha,
             "hidden_size": model.hidden_size,
             "num_layers": model.num_layers,
+            "seq_len": model.seq_len,
         },
     )
     model.learn(total_timesteps=100_000_000)
