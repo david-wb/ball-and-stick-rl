@@ -578,7 +578,7 @@ if __name__ == "__main__":
     model = CustomSAC(
         env,
         learning_rate=2e-4,
-        buffer_size=2_000_000,
+        buffer_size=100_000,
         batch_size=128,
         gamma=0.99,
         tau=0.005,
