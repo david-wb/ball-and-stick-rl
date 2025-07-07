@@ -137,6 +137,27 @@ class SphericalPendulumEnv(gym.Env):
         mujoco.mj_forward(self.model, self.data)
         return self._get_obs(), {}
 
+    def angle_between_vectors(self, v1, v2):
+        """
+        Compute the angle in radians between two vectors using NumPy, with output in [0, pi].
+
+        Args:
+            v1 (np.ndarray): First vector
+            v2 (np.ndarray): Second vector
+
+        Returns:
+            float: Angle in radians, in the range [0, pi]
+
+        Raises:
+            ValueError: If either vector has zero magnitude
+        """
+        dot_product = np.dot(v1, v2)
+        norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
+        if norm_product == 0:
+            raise ValueError("One or both vectors have zero magnitude")
+        cos_theta = np.clip(dot_product / norm_product, -1.0, 1.0)
+        return np.arccos(cos_theta)
+
     def step(self, action, target_velocity=None):
         self.step_count += 1
         if target_velocity is not None:
@@ -155,14 +176,29 @@ class SphericalPendulumEnv(gym.Env):
         upright_reward = 1 - angle_deviation
 
         base_vel = obs[6:9][:2]  # Normalized base velocity (x, y components)
-        vel_error = np.linalg.norm(
-            base_vel * self.max_speed - self.target_velocity
-        )  # Un-normalize base_vel
-        max_vel_error = 2 * self.max_speed  # From velocity_range
-        velocity_penalty = -1.0 * (vel_error / max_vel_error)
-        control_penalty = -0.01 * np.sum(np.square(action))
 
-        reward = float(2 * upright_reward + velocity_penalty + control_penalty)
+        vel_angle_error = (
+            self.angle_between_vectors(base_vel, self.target_velocity) / np.pi
+        )  # Normalize angle error to [0, 1]
+
+        vel_speed_error = (
+            abs(
+                np.linalg.norm(base_vel * self.max_speed)
+                - np.linalg.norm(self.target_velocity)
+            )
+            / self.max_speed
+        )
+
+        if angle_deviation < np.pi / 6:
+            vel_angle_reward = 0.2 * (1 - vel_angle_error)
+            vel_speed_reward = 0.1 * (1 - np.clip(vel_speed_error, 0, 1))
+        else:
+            vel_angle_reward = 0
+            vel_speed_reward = 0
+
+        control_penalty = -0.1 * np.sum(np.square(action))
+
+        reward = float(2 * upright_reward + vel_angle_reward + vel_speed_reward + control_penalty)
         terminated = bool(z_axis[2] < 0.1)  # Relaxed termination condition
 
         truncated = False
@@ -182,8 +218,8 @@ class SphericalPendulumEnv(gym.Env):
             truncated,
             {
                 "upright_reward": upright_reward,
-                "velocity_penalty": velocity_penalty,
-                "velocity_error": vel_error,
+                "vel_angle_reward": vel_angle_reward,
+                "vel_speed_reward": vel_speed_reward,
                 "control_penalty": control_penalty,
             },
         )
@@ -218,7 +254,9 @@ class ReplayBuffer:
         self.next_observations = np.zeros(
             (capacity, seq_len, obs_dim), dtype=np.float32
         )
-        self.next_hiddens = np.zeros((capacity, seq_len, 1, hidden_dim), dtype=np.float32)
+        self.next_hiddens = np.zeros(
+            (capacity, seq_len, 1, hidden_dim), dtype=np.float32
+        )
         self.dones = np.zeros((capacity, seq_len), dtype=np.bool_)
         self.masks = np.ones(
             (capacity, seq_len), dtype=np.float32
@@ -342,11 +380,11 @@ class CustomSAC:
         batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.3,
+        alpha=0.5,
         hidden_size=32,
         num_layers=1,
         seq_len=100,
-        device="cpu",
+        device="cuda" if torch.cuda.is_available() else "cpu",
     ):
         self.env = env
         self.learning_rate = learning_rate
@@ -488,7 +526,7 @@ class CustomSAC:
                 print(f"Saved model checkpoint to: {save_file}")
 
     def _update_networks(self):
-        if self.replay_buffer.size < self.batch_size:
+        if self.replay_buffer.size < self.batch_size * 10:
             return
 
         (
@@ -577,7 +615,7 @@ if __name__ == "__main__":
     env = SphericalPendulumEnv(max_steps=2048, randomize_velocity=True)
     model = CustomSAC(
         env,
-        learning_rate=2e-4,
+        learning_rate=1e-4,
         buffer_size=100_000,
         batch_size=128,
         gamma=0.99,
