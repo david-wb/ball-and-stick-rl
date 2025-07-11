@@ -53,3 +53,9 @@ The training metrics are logged to https://wanb.ai
 For SAC they look something like this:
 
 <img src="static/training_metrics.png" alt="SAC Metrics" width="600">
+
+# In Progress
+
+Working on a more realistic model with omni-wheels in contact with the sphere...
+
+<img src="static/model.png" alt="Model" width="300">
