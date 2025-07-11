@@ -1,0 +1,52 @@
+<mujoco model="robot_with_wheelbase">
+    <compiler coordinate="local" angle="degree"/>
+    <option timestep="0.001" integrator="RK4" gravity="0 0 -9.81"/>
+    <default>
+        <geom rgba="1 1 1 1" />
+        <joint damping="0.2"/>
+    </default>
+    <visual>
+        <global offwidth="1920" offheight="1080"/>
+    </visual>
+    <asset>
+        <texture name="checker" type="2d" builtin="checker" rgb1="0 0 0" rgb2="1 1 1" width="100" height="100" mark="none"/>
+        <material name="checker_mat" texture="checker" specular="0.5" shininess="0.6" texrepeat="10 10"/>
+        <material name="robot_mat" rgba="0.5 0.5 0.5 1"/>
+        <!-- <material name="wheel_mat" rgba="0.3 0.3 0.3 1"/> -->
+    </asset>
+    <worldbody>
+        <!-- <light pos="0 0 10" dir="0 0 -1" diffuse="1 1 1" specular="0 0 0"/> -->
+        <geom name="floor" type="plane" material="checker_mat" size="10 10 0.1"/>
+        <body name="base" pos="0 0 0.15">
+            <freejoint name="base_free"/>
+            <geom name="base_sphere" type="sphere" size="0.15" mass="10" rgba="0.4 0.5 0.6 1"/>
+        </body>
+        <body name="wheel_base" pos="0 0 0.3">
+            <freejoint name="wheel_base_free"/>
+            <include file="wheel_base.xml"/>
+        </body>
+
+            <light
+      name="diffuse_light"
+      pos="0 0 5"
+      dir="0 0 -1"
+      directional="false"
+      diffuse="0.8 0.8 0.8"
+      specular="0 0 0"
+      castshadow="false"
+    />
+    </worldbody>
+    <sensor>
+        <framequat name="angle" objtype="body" objname="wheel_base"/>
+        <frameangvel name="velocity" objtype="body" objname="wheel_base"/>
+        <framepos name="base_pos" objtype="body" objname="base"/>
+        <framexaxis name="base_xaxis" objtype="body" objname="base"/>
+        <frameyaxis name="base_yaxis" objtype="body" objname="base"/>
+        <framezaxis name="base_zaxis" objtype="body" objname="base"/>
+    </sensor>
+    <actuator>
+        <motor name="motor1" joint="wheel1_joint" gear="1" ctrlrange="-10 10"/>
+        <motor name="motor2" joint="wheel2_joint" gear="1" ctrlrange="-10 10"/>
+        <motor name="motor3" joint="wheel3_joint" gear="1" ctrlrange="-10 10"/>
+    </actuator>
+</mujoco>
