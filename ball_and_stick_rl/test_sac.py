@@ -62,7 +62,7 @@ try:
             elapsed_time = current_time - start_time
 
             # Predict with custom SAC policy
-            action, hidden = model.predict(obs, hidden=hidden, deterministic=False)
+            action, hidden = model.predict(obs, hidden=hidden, deterministic=True)
 
             # Step the environment
             obs, reward, terminated, truncated, info = env.step(
