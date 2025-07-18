@@ -12,62 +12,55 @@
         <texture name="checker" type="2d" builtin="checker" rgb1="0 0 0" rgb2="1 1 1" width="100" height="100" mark="none"/>
         <material name="checker_mat" texture="checker" specular="0.5" shininess="0.6" texrepeat="10 10"/>
         <material name="robot_mat" rgba="0.5 0.5 0.5 1"/>
-        <!-- <material name="wheel_mat" rgba="0.3 0.3 0.3 1"/> -->
     </asset>
     <worldbody>
-        <!-- <light pos="0 0 10" dir="0 0 -1" diffuse="1 1 1" specular="0 0 0"/> -->
         <geom name="floor" type="plane" material="checker_mat" size="10 10 0.1"/>
         <body name="base" pos="0 0 0.15">
             <freejoint name="base_free"/>
-            <geom name="base_sphere" type="sphere" size="0.15" mass="10" rgba="0.4 0.5 0.6 0.5" contype="1" conaffinity="1"/>
+            <geom name="base_sphere" type="sphere" size="0.15" mass="20" rgba="0.4 0.5 0.6 0.5" />
         </body>
         <body name="wheel_base" pos="0 0 0.35">
             <freejoint name="wheel_base_free"/>
             <!-- Robot Chassis -->
-            <geom name="chassis_geom" type="cylinder" size="0.15 0.01" material="robot_mat" mass="1.0" rgba="1 0.5 0 1"/>
-            <!-- Vertical Rod -->
-            <body name="rod" pos="0 0 0.3">
-                <geom name="rod_geom" type="cylinder" size="0.01 0.3" rgba="1 0.2 0 1" mass="0.2"/>
+            <geom name="chassis_geom" type="cylinder" size="0.15 0.01" material="robot_mat" mass="1.0" rgba="1 0.5 0 0.5"/>
+            <!-- Vertical pendulum -->
+            <body name="pendulum" pos="0 0 0.3">
+                <geom name="rod_geom" type="cylinder" size="0.01 0.3" rgba="1 0.2 0 0.5" mass="0.2"/>
                 <!-- Ball Tip -->
-                <body name="rod_tip" pos="0 0 0.3">                    <!-- Positioned at rod top (0.1 + 0.04 sphere radius) -->
-                    <geom name="rod_tip_geom" type="sphere" size="0.04" rgba="1 0.0 0 1" mass="0.05"/>
-                    <!-- Ball: radius 0.04m -->
+                <body name="rod_tip" pos="0 0 0.3">
+                    <geom name="rod_tip_geom" type="sphere" size="0.04" rgba="1 0.0 0 0.5" mass="0.05"/>
                 </body>
             </body>
             <!-- Wheel 1: Positioned at 0 degrees, tilted -45 degrees toward ball center -->
             <body name="wheel1" pos="0.12727922061357855 0 -0.07" euler="0 -45 0">
                 <joint name="wheel1_joint" type="hinge" axis="0 0 1" damping="0.1"/>
-                <geom name="wheel1_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" contype="1" conaffinity="1"/>
+                <geom name="wheel1_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
             </body>
             <body name="wheel2" pos="-0.06363961030678925 0.110227038425243 -0.07" euler="40.89339465 20.70481105 -112.2076543">
                 <joint name="wheel2_joint" type="hinge" axis="0 0 1" damping="0.1"/>
-                <geom name="wheel2_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" contype="1" conaffinity="1"/>
+                <geom name="wheel2_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
             </body>
             <body name="wheel3" pos="-0.06363961030678925 -0.11022703842524297 -0.07" euler="-40.89339465 20.70481105 112.2076543">
                 <joint name="wheel3_joint" type="hinge" axis="0 0 1" damping="0.1"/>
-                <geom name="wheel3_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" contype="1" conaffinity="1"/>
+                <geom name="wheel3_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
             </body>
         </body>
-
         <light name="diffuse_light" pos="0 0 5" dir="0 0 -1" directional="false" diffuse="0.8 0.8 0.8" specular="0 0 0" castshadow="false" />
     </worldbody>
     <sensor>
-        <framequat name="angle" objtype="body" objname="wheel_base"/>
-        <frameangvel name="velocity" objtype="body" objname="wheel_base"/>
-        <framepos name="base_pos" objtype="body" objname="base"/>
-        <framexaxis name="base_xaxis" objtype="body" objname="base"/>
-        <frameyaxis name="base_yaxis" objtype="body" objname="base"/>
-        <framezaxis name="base_zaxis" objtype="body" objname="base"/>
+        <framequat name="pendulum_angle" objtype="body" objname="pendulum"/>
+        <frameangvel name="pendulum_angular_velocity" objtype="body" objname="pendulum"/>
+        <framelinvel name="base_linear_velocity" objtype="body" objname="base"/>
     </sensor>
     <actuator>
-        <motor name="motor1" joint="wheel1_joint" gear="1" ctrlrange="-10 10"/>
-        <motor name="motor2" joint="wheel2_joint" gear="1" ctrlrange="-10 10"/>
-        <motor name="motor3" joint="wheel3_joint" gear="1" ctrlrange="-10 10"/>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-5 5"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-5 5"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-5 5"/>
     </actuator>
     <contact>
         <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
-        <pair geom2="wheel1_geom" geom1="base_sphere" friction="2 0 0.005 0.0000 0.0000" condim="6" gap="0.001"/>
-        <pair geom2="wheel2_geom" geom1="base_sphere" friction="2 0 0.005 0.0000 0.0000" condim="6" gap="0.001"/>
-        <pair geom2="wheel3_geom" geom1="base_sphere" friction="2 0 0.005 0.0000 0.0000" condim="6" gap="0.001"/>
+        <pair geom2="wheel1_geom" geom1="base_sphere" friction="0 1 0.005 0.0000 0.0000" condim="6" />
+        <pair geom2="wheel2_geom" geom1="base_sphere" friction="0 1 0.005 0.0000 0.0000" condim="6" />
+        <pair geom2="wheel3_geom" geom1="base_sphere" friction="0 1 0.005 0.0000 0.0000" condim="6" />
     </contact>
 </mujoco>
