@@ -12,7 +12,7 @@ import uuid
 from collections import deque
 import random
 
-# MuJoCo XML model string
+# MuJoCo XML model stringf
 MUJOCO_XML = """
 <mujoco model="robot_with_wheelbase">
     <compiler coordinate="local" angle="degree"/>
@@ -382,7 +382,7 @@ class PolicyNetwork(nn.Module):
             nn.Linear(hidden_size, act_dim),
             nn.Tanh(),  # Output in [-1, 1]
         )
-        self.actor_log_std = nn.Parameter(-torch.ones(act_dim))  # Learnable log_std
+        self.actor_log_std = nn.Parameter(-2*torch.ones(act_dim))  # Learnable log_std
         self.action_scale = torch.tensor(5.0)  # Scale to [-5, 5]
 
     def forward(self, obs, hidden=None):
