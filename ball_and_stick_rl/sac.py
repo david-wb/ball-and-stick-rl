@@ -251,6 +251,12 @@ class SphericalPendulumEnv(gym.Env):
         )
         terminated = bool(z_axis[2] < 0.1)  # Relaxed termination condition
 
+        # Check if robot fell or jumped off the sphere
+        wheel_base_pos = self.data.body("wheel_base").xpos
+        if wheel_base_pos[2] < 0.2:
+            terminated = True
+            reward = -1.0
+
         truncated = False
         if self.step_count >= self.max_steps:
             truncated = True
@@ -376,7 +382,7 @@ class PolicyNetwork(nn.Module):
             nn.Linear(hidden_size, act_dim),
             nn.Tanh(),  # Output in [-1, 1]
         )
-        self.actor_log_std = nn.Parameter(torch.zeros(act_dim))  # Learnable log_std
+        self.actor_log_std = nn.Parameter(-torch.ones(act_dim))  # Learnable log_std
         self.action_scale = torch.tensor(5.0)  # Scale to [-5, 5]
 
     def forward(self, obs, hidden=None):
