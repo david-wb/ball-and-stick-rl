@@ -69,9 +69,9 @@ MUJOCO_XML = """
         <framelinvel name="base_linear_velocity" objtype="body" objname="base"/>
     </sensor>
     <actuator>
-        <motor name="motor1" joint="wheel1_joint" ctrlrange="-5 5"/>
-        <motor name="motor2" joint="wheel2_joint" ctrlrange="-5 5"/>
-        <motor name="motor3" joint="wheel3_joint" ctrlrange="-5 5"/>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-1 1"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-1 1"/>
     </actuator>
     <contact>
         <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
@@ -111,7 +111,7 @@ class SphericalPendulumEnv(gym.Env):
 
         # Updated action space to 3 dimensions for 3 motors
         self.action_space = spaces.Box(
-            low=-5.0, high=5.0, shape=(3,), dtype=np.float32
+            low=-1.0, high=1.0, shape=(3,), dtype=np.float32
         )
 
         obs_size = 3 + 3 + 3 + 2  # z_axis, ang_vel, base_vel, target_velocity
@@ -209,7 +209,7 @@ class SphericalPendulumEnv(gym.Env):
             self.target_velocity = np.array(target_velocity, dtype=np.float32)
 
         # Ensure action is 3D and assign to all three motors
-        action = np.clip(action, -5.0, 5.0)  # Ensure action is within bounds
+        action = np.clip(action, -1.0, 1.0)  # Ensure action is within bounds
         self.data.ctrl[:3] = action  # Assign to motor1, motor2, motor3
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
@@ -383,7 +383,7 @@ class PolicyNetwork(nn.Module):
             nn.Tanh(),  # Output in [-1, 1]
         )
         self.actor_log_std = nn.Parameter(-2*torch.ones(act_dim))  # Learnable log_std
-        self.action_scale = torch.tensor(5.0)  # Scale to [-5, 5]
+        self.action_scale = torch.tensor(1.0)  # Scale to [-1, 1]
 
     def forward(self, obs, hidden=None):
         if obs.dim() == 2:

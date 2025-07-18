@@ -53,9 +53,9 @@
         <framelinvel name="base_linear_velocity" objtype="body" objname="base"/>
     </sensor>
     <actuator>
-        <motor name="motor1" joint="wheel1_joint" ctrlrange="-5 5"/>
-        <motor name="motor2" joint="wheel2_joint" ctrlrange="-5 5"/>
-        <motor name="motor3" joint="wheel3_joint" ctrlrange="-5 5"/>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-1 1"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-1 1"/>
     </actuator>
     <contact>
         <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
