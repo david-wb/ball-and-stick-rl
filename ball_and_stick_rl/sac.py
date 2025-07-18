@@ -110,9 +110,7 @@ class SphericalPendulumEnv(gym.Env):
         self.data = mujoco.MjData(self.model)
 
         # Updated action space to 3 dimensions for 3 motors
-        self.action_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(3,), dtype=np.float32
-        )
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
         obs_size = 3 + 3 + 3 + 2  # z_axis, ang_vel, base_vel, target_velocity
         self.observation_space = spaces.Box(
@@ -382,7 +380,7 @@ class PolicyNetwork(nn.Module):
             nn.Linear(hidden_size, act_dim),
             nn.Tanh(),  # Output in [-1, 1]
         )
-        self.actor_log_std = nn.Parameter(-2*torch.ones(act_dim))  # Learnable log_std
+        self.actor_log_std = nn.Parameter(-2 * torch.ones(act_dim))  # Learnable log_std
         self.action_scale = torch.tensor(1.0)  # Scale to [-1, 1]
 
     def forward(self, obs, hidden=None):
@@ -393,6 +391,7 @@ class PolicyNetwork(nn.Module):
         gru_out, new_hidden = self.gru(obs, hidden)
         mean = self.actor_mean(gru_out) * self.action_scale.to(gru_out.device)
         log_std = self.actor_log_std.expand_as(mean)
+        log_std = torch.clamp(log_std, -20, -1)
         std = torch.exp(log_std)
         return mean, std, new_hidden
 
@@ -436,7 +435,7 @@ class CustomSAC:
         batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.5,
+        alpha=0.1,
         hidden_size=32,
         num_layers=1,
         seq_len=100,
@@ -676,7 +675,7 @@ if __name__ == "__main__":
         batch_size=128,
         gamma=0.99,
         tau=0.005,
-        alpha=0.3,
+        alpha=0.1,
         hidden_size=32,
         num_layers=1,
         seq_len=32,
