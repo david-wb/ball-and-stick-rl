@@ -143,7 +143,7 @@ class SphericalPendulumEnv(gym.Env):
         z_axis = obs[:3]  # Normalized z_axis from _get_obs
         upright_reward = z_axis[2]  # Cosine of angle with vertical
         angle_deviation = np.arccos(np.clip(z_axis[2], -1, 1))
-        angle_penalty = -1.0 * angle_deviation / (np.pi/2)  # Scales between [-1, 0]
+        angle_penalty = -1.0 * angle_deviation / (np.pi / 2)  # Scales between [-1, 0]
         base_vel = obs[6:9][:2]  # Normalized base velocity (x, y components)
         vel_error = np.linalg.norm(
             base_vel * self.max_speed - self.target_velocity

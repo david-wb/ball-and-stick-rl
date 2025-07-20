@@ -1,1 +1,1 @@
-poetry run mjpython -m ball_and_stick_rl.test_sac
+poetry run python -m ball_and_stick_rl.test_sac

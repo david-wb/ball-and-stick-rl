@@ -197,6 +197,7 @@ class SphericalPendulumEnv(gym.Env):
         dot_product = np.dot(v1, v2)
         norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
         if norm_product == 0:
+            return np.pi  # If either vector is zero, return pi (angle is undefined)
             raise ValueError("One or both vectors have zero magnitude")
         cos_theta = np.clip(dot_product / norm_product, -1.0, 1.0)
         return np.arccos(cos_theta)
@@ -207,8 +208,9 @@ class SphericalPendulumEnv(gym.Env):
             self.target_velocity = np.array(target_velocity, dtype=np.float32)
 
         # Ensure action is 3D and assign to all three motors
-        action = np.clip(action, -1.0, 1.0)  # Ensure action is within bounds
-        self.data.ctrl[:3] = action  # Assign to motor1, motor2, motor3
+        self.data.ctrl[:3] = np.clip(
+            action, -1.0, 1.0
+        )  # Ensure action is within bounds and assign to motor1, motor2, motor3
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
 
@@ -222,38 +224,30 @@ class SphericalPendulumEnv(gym.Env):
 
         base_vel = obs[6:9][:2]  # Normalized base velocity (x, y components)
 
-        vel_angle_error = (
-            self.angle_between_vectors(base_vel, self.target_velocity) / np.pi
-        )  # Normalize angle error to [0, 1]
-
         vel_speed_error = (
-            abs(
-                np.linalg.norm(base_vel * self.max_speed)
-                - np.linalg.norm(self.target_velocity)
-            )
+            np.linalg.norm(base_vel * self.max_speed - self.target_velocity)
             / self.max_speed
         )
 
         if angle_deviation < np.pi / 6:
-            vel_angle_reward = 0.2 * (1 - vel_angle_error)
-            vel_speed_reward = 0.1 * (1 - np.clip(vel_speed_error, 0, 1))
+            velocity_reward = 0.1 * (1 - np.clip(vel_speed_error, 0, 1))
         else:
-            vel_angle_reward = 0
-            vel_speed_reward = 0
+            velocity_reward = 0
 
         # Update control penalty for 3D action
-        control_penalty = -0.001 * np.sum(np.square(action))
+        control_penalty = -0.1 * np.sum(np.square(action))
 
-        reward = float(
-            2 * upright_reward + vel_angle_reward + vel_speed_reward + control_penalty
-        )
-        terminated = bool(z_axis[2] < 0.1)  # Relaxed termination condition
+        reward = float(upright_reward + velocity_reward + control_penalty)
+        terminated = False
+        if z_axis[2] < 0.1:
+            terminated = True
+            reward = -1000
 
         # Check if robot fell or jumped off the sphere
         wheel_base_pos = self.data.body("wheel_base").xpos
         if wheel_base_pos[2] < 0.2:
             terminated = True
-            reward = -1.0
+            reward = -1000
 
         truncated = False
         if self.step_count >= self.max_steps:
@@ -272,8 +266,7 @@ class SphericalPendulumEnv(gym.Env):
             truncated,
             {
                 "upright_reward": upright_reward,
-                "vel_angle_reward": vel_angle_reward,
-                "vel_speed_reward": vel_speed_reward,
+                "velocity_reward": velocity_reward,
                 "control_penalty": control_penalty,
             },
         )
@@ -380,7 +373,7 @@ class PolicyNetwork(nn.Module):
             nn.Linear(hidden_size, act_dim),
             nn.Tanh(),  # Output in [-1, 1]
         )
-        self.actor_log_std = nn.Parameter(-2 * torch.ones(act_dim))  # Learnable log_std
+        self.actor_log_std = nn.Parameter(-3 * torch.ones(act_dim))  # Learnable log_std
         self.action_scale = torch.tensor(1.0)  # Scale to [-1, 1]
 
     def forward(self, obs, hidden=None):
@@ -672,14 +665,13 @@ if __name__ == "__main__":
         env,
         learning_rate=1e-4,
         buffer_size=100_000,
-        batch_size=128,
+        batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.05,
-        hidden_size=32,
+        alpha=0.1,
+        hidden_size=64,
         num_layers=1,
         seq_len=32,
-        device="cpu",
     )
     run = wandb.init(
         project="spherical-pendulum",

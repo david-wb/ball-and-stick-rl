@@ -6,12 +6,12 @@ import mujoco.viewer
 import time
 
 # Create the environment
-env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5)
+env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5, max_steps=2000)
 
 # Initialize the policy network
 obs_dim = env.observation_space.shape[0]
 act_dim = env.action_space.shape[0]
-policy = PolicyNetwork(obs_dim, act_dim, hidden_size=32, num_layers=1)
+policy = PolicyNetwork(obs_dim, act_dim, hidden_size=64, num_layers=1)
 
 # Load the trained model
 checkpoint_path = "checkpoints/model_sac.pt"  # Path to SAC checkpoint
@@ -25,11 +25,11 @@ model = CustomSAC(
     env,
     learning_rate=1e-4,
     buffer_size=1000000,
-    batch_size=128,
+    batch_size=256,
     gamma=0.99,
     tau=0.005,
     alpha=0.2,
-    hidden_size=32,
+    hidden_size=64,
     num_layers=1,
     device="cpu",
 )
@@ -56,7 +56,7 @@ try:
         # Initialize timing
         start_time = time.time()
 
-        for t in range(10000):
+        for t in range(50000):
             # Get current time
             current_time = time.time()
             elapsed_time = current_time - start_time
