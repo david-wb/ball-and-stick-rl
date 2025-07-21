@@ -8,7 +8,7 @@ This repo uses the SAC algorithm to train an robot to balance on top of a rollin
 
 # Setup
 
-This currently repo depends on a [fork of MuJoCo](https://github.com/david-wb/mujoco) which contains a small change to support anisotropic friction for the omni-wheels in contact with the sphere. You'll first need to clone and build the fork, including the python bindings, and then install them into the poetry environment of this repo with `poetry add <path to python sdist>`.
+This currently repo depends on a [fork of MuJoCo](https://github.com/david-wb/mujoco) which contains a [small change](https://github.com/google-deepmind/mujoco/pull/2751) to support anisotropic friction for the omni-wheels in contact with the sphere. You'll first need to clone and build the fork, including the python bindings, and then edit the absolute path to the `mujoco-3.3.5.tar.gz` in the `pyproject.toml` file.
 
 Install dependencies with `poetry`
 
@@ -48,8 +48,8 @@ For SAC they look something like this:
 
 <img src="static/training_metrics.png" alt="SAC Metrics" width="600">
 
-# Notes
+# Observations
 
 The PPO algorithm was also tested but it did not work well (as implemented anyway).
-The SAC algorithm does learn to balance but current plateaus at a sub-optimal performance level
+The SAC algorithm does learn to balance but seems plateau at a sub-optimal performance level
 and has difficulty learning to track the target velocity.
