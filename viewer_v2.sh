@@ -1,1 +1,0 @@
-poetry run python -m mujoco.viewer --mjcf mujoco_models/robot.xml
