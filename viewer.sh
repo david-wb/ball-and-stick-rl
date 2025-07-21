@@ -1,1 +1,1 @@
-poetry run python -m mujoco.viewer --mjcf spherical_pendulum.xml
+poetry run python -m mujoco.viewer --mjcf mujoco_models/robot.xml

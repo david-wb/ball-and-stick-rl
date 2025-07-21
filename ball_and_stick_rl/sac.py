@@ -12,13 +12,13 @@ import uuid
 from collections import deque
 import random
 
-# MuJoCo XML model string
+# MuJoCo XML model stringf
 MUJOCO_XML = """
-<mujoco model="spherical_pendulum">
-    <compiler angle="radian" coordinate="local"/>
-    <option timestep="0.001" integrator="RK4" gravity="0 0 -9.81"/>
+<mujoco model="robot_with_wheelbase">
+    <compiler coordinate="local" angle="degree"/>
+    <option timestep="0.001" integrator="RK4" gravity="0 0 -9.81" impratio="10"/>
     <default>
-        <geom rgba="1 1 1 1" friction="0.8 0.05 0.001"/>
+        <geom rgba="1 1 1 1" />
         <joint damping="0.2"/>
     </default>
     <visual>
@@ -27,37 +27,70 @@ MUJOCO_XML = """
     <asset>
         <texture name="checker" type="2d" builtin="checker" rgb1="0 0 0" rgb2="1 1 1" width="100" height="100" mark="none"/>
         <material name="checker_mat" texture="checker" specular="0.5" shininess="0.6" texrepeat="10 10"/>
+        <material name="robot_mat" rgba="0.5 0.5 0.5 1"/>
     </asset>
     <worldbody>
-        <light pos="0 0 10" dir="0 0 -1" diffuse="1 1 1" specular="0 0 0"/>
         <geom name="floor" type="plane" material="checker_mat" size="10 10 0.1"/>
-        <body name="base" pos="0 0 0.15">
-            <freejoint name="base_free"/>
-            <geom name="base_sphere" type="sphere" size="0.15" mass="10" rgba="0.3 0.3 0.3 1"/>
-            <body name="pendulum" pos="0 0 0">
-                <joint name="ball_joint" type="ball" pos="0 0 0" range="0 3.1416" damping="0.2"/>
-                <geom name="rod" type="capsule" fromto="0 0 0 0 0 1.0" size="0.01" mass="1.5" rgba="0 0.7 0.7 1"/>
-                <geom name="tip_sphere" type="sphere" pos="0 0 1.0" size="0.05" mass="0" rgba="0.7 0.3 0.3 1"/>
-                <site name="tip" pos="0 0 1.0" size="0.02"/>
+        <body name="sphere" pos="0 0 0.15">
+            <freejoint name="sphere_free"/>
+            <site name="sphere_imu_site" pos="0 0 0" />
+            <geom name="sphere_geom" type="sphere" size="0.15" mass="15" rgba="0.4 0.5 0.6 0.5" />
+        </body>
+        <body name="robot" pos="0 0 0.35">
+            <freejoint name="robot_free"/>
+            <!-- Robot Chassis -->
+            <geom name="chassis_geom" type="cylinder" size="0.15 0.01" material="robot_mat" mass="5.0" rgba="1 0.5 0 0.5"/>
+            <!-- Vertical pendulum -->
+            <body name="pendulum" pos="0 0 0.3">
+                <site name="pendulum_imu_site" pos="0 0 0" />
+                <geom name="rod_geom" type="cylinder" size="0.01 0.3" rgba="1 0.2 0 0.5" mass="0.2"/>
+                <!-- Ball Tip -->
+                <body name="rod_tip" pos="0 0 0.3">
+                    <geom name="rod_tip_geom" type="sphere" size="0.04" rgba="1 0.0 0 0.5" mass="0.05"/>
+                </body>
+            </body>
+            <!-- Wheel 1: Positioned at 0 degrees, tilted -45 degrees toward ball center -->
+            <body name="wheel1" pos="0.12727922061357855 0 -0.07" euler="0 -45 0">
+                <joint name="wheel1_joint" type="hinge" axis="0 0 1" damping="0.1"/>
+                <geom name="wheel1_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
+            </body>
+            <body name="wheel2" pos="-0.06363961030678925 0.110227038425243 -0.07" euler="40.89339465 20.70481105 -112.2076543">
+                <joint name="wheel2_joint" type="hinge" axis="0 0 1" damping="0.1"/>
+                <geom name="wheel2_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
+            </body>
+            <body name="wheel3" pos="-0.06363961030678925 -0.11022703842524297 -0.07" euler="-40.89339465 20.70481105 112.2076543">
+                <joint name="wheel3_joint" type="hinge" axis="0 0 1" damping="0.1"/>
+                <geom name="wheel3_geom" type="cylinder" size="0.03 0.02" rgba="0.5 0.5 0.5 1" mass="0.5" />
             </body>
         </body>
+        <light name="diffuse_light" pos="0 0 5" dir="0 0 -1" directional="false" diffuse="0.8 0.8 0.8" specular="0 0 0" castshadow="false" />
     </worldbody>
-    <actuator>
-        <motor name="torque_x" joint="ball_joint" gear="1 0 0" ctrlrange="-20 20"/>
-        <motor name="torque_y" joint="ball_joint" gear="0 1 0" ctrlrange="-20 20"/>
-    </actuator>
     <sensor>
-        <framequat name="angle" objtype="body" objname="pendulum"/>
-        <frameangvel name="velocity" objtype="body" objname="pendulum"/>
-        <framepos name="base_pos" objtype="body" objname="base"/>
-        <framexaxis name="base_xaxis" objtype="body" objname="base"/>
-        <frameyaxis name="base_yaxis" objtype="body" objname="base"/>
-        <framezaxis name="base_zaxis" objtype="body" objname="base"/>
+        <framequat name="pendulum_angle" objtype="body" objname="pendulum"/>
+        <gyro name="pendulum_gyro" site="pendulum_imu_site"/>
+        <accelerometer name="pendulum_accel" site="pendulum_imu_site"/>
+        <framelinvel name="sphere_linear_velocity" objtype="body" objname="sphere"/>
+        <gyro name="sphere_gyro" site="sphere_imu_site"/>
+        <accelerometer name="sphere_accel" site="pendulum_imu_site"/>
+        <jointvel joint="wheel1_joint" name="wheel1_velocity"/>
+        <jointvel joint="wheel2_joint" name="wheel2_velocity"/>
+        <jointvel joint="wheel3_joint" name="wheel3_velocity"/>
     </sensor>
+    <actuator>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-1 1"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-1 1"/>
+    </actuator>
+    <contact>
+        <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
+        <pair geom2="wheel1_geom" geom1="sphere_geom" friction="0 1 0.005 0.0000 0.0000" condim="6" />
+        <pair geom2="wheel2_geom" geom1="sphere_geom" friction="0 1 0.005 0.0000 0.0000" condim="6" />
+        <pair geom2="wheel3_geom" geom1="sphere_geom" friction="0 1 0.005 0.0000 0.0000" condim="6" />
+    </contact>
 </mujoco>
 """
 
-xml_file = "spherical_pendulum.xml"
+xml_file = "mujoco_models/robot.xml"
 
 if not os.path.isfile(xml_file):
     with open(xml_file, "w") as f:
@@ -84,11 +117,17 @@ class SphericalPendulumEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_path(xml_file)
         self.data = mujoco.MjData(self.model)
 
-        self.action_space = spaces.Box(
-            low=-20.0, high=20.0, shape=(2,), dtype=np.float32
-        )
+        # Store initial positions and quaternions from the model
+        self.sphere_init_qpos = self._get_body_qpos("sphere")
+        self.robot_init_qpos = self._get_body_qpos("robot")
+        self.init_quat = np.array([1.0, 0.0, 0.0, 0.0])  # Default quaternion (identity)
 
-        obs_size = 3 + 3 + 3 + 2  # z_axis, ang_vel, base_vel, target_velocity
+        # Updated action space to 3 dimensions for 3 motors
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
+
+        obs_size = (
+            3 + 3 + 3 + 3 + 3 + 3 + 2 + 3
+        )  # z_axis, pendulum_gyro, pendulum_accel, sphere_linvel, sphere_gyro, sphere_accel, target_velocity, motor_speeds
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float32
         )
@@ -97,35 +136,154 @@ class SphericalPendulumEnv(gym.Env):
         self.frame_skip = 4
         self.step_count = 0
 
+    def _get_body_qpos(self, body_name: str):
+        # Get body ID by name
+        body_id = self.model.body(body_name).id
+
+        # Check if the body has associated joints
+        qpos_start_idx = self.model.body_jntadr[body_id]
+        if qpos_start_idx >= 0:
+            # # Calculate the number of DoFs for the body's joints
+            # num_dofs = sum(
+            #     self.model.jnt_dofadr[self.model.body_jntadr[body_id] + i + 1]
+            #     - self.model.jnt_dofadr[self.model.body_jntadr[body_id] + i]
+            #     for i in range(self.model.body_jntnum[body_id])
+            # )
+
+            # Record the original qpos
+            original_qpos = self.data.qpos[qpos_start_idx : qpos_start_idx + 7].copy()
+            print(f"Original qpos for body {body_name}: {original_qpos}")
+        else:
+            print(
+                f"Body {body_name} has no joints, so no qpos data. Consider using data.xpos[{body_id}] for Cartesian position."
+            )
+            original_qpos = None
+        return original_qpos
+
     def _get_obs(self):
-        quat = self.data.sensor("angle").data
+        # Read pendulum quaternion to compute z-axis projection
+        quat = self.data.sensor("pendulum_angle").data
         w, x, y, z = quat
-        z_axis = np.array(
+        pendulum_z_axis = np.array(
             [2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)]
         )
-        ang_vel = self.data.sensor("velocity").data
-        base_vel = self.data.qvel[:3]
+        pendulum_z_axis /= np.linalg.norm(pendulum_z_axis)
+
+        pendulum_gyro = self.data.sensor("pendulum_gyro").data
+        pendulum_accel = self.data.sensor("pendulum_accel").data
+
+        sphere_linear_velocity = self.data.sensor("sphere_linear_velocity").data
+        sphere_gyro = self.data.sensor("sphere_gyro").data
+        sphere_accel = self.data.sensor("sphere_accel").data
+
+        motor_speeds = np.array(
+            [
+                *self.data.sensor("wheel1_velocity").data,
+                *self.data.sensor("wheel2_velocity").data,
+                *self.data.sensor("wheel3_velocity").data,
+            ],
+            dtype=np.float32,
+        )
+
+        # Concatenate observation vector
         obs = np.concatenate(
             [
-                z_axis / np.linalg.norm(z_axis),
-                ang_vel / 1.0,  # Assume max angular velocity ~1.0
-                base_vel / self.max_speed,  # Max base velocity
-                self.target_velocity / self.max_speed,
+                pendulum_z_axis,
+                pendulum_gyro,
+                pendulum_accel,
+                sphere_linear_velocity,
+                sphere_gyro,
+                sphere_accel,
+                self.target_velocity,
+                motor_speeds,
             ]
         )
         return obs.astype(np.float32)
 
+    def _get_random_init_quat(self, max_angle_deg=10):
+        # Define the z-axis quaternion [0, 0, 0, 1] (w, x, y, z convention)
+        base_quat = np.array([0.0, 0.0, 0.0, 1.0])
+
+        # Generate a small random rotation angle (in radians)
+        max_angle_rad = np.deg2rad(max_angle_deg)
+        angle = np.random.uniform(0, max_angle_rad)
+
+        # Generate a random axis perpendicular to z-axis (e.g., in xy-plane)
+        theta = np.random.uniform(0, 2 * np.pi)
+        axis = np.array([np.cos(theta), np.sin(theta), 0.0])
+
+        # Create a quaternion for the small rotation
+        sin_half_angle = np.sin(angle / 2)
+        cos_half_angle = np.cos(angle / 2)
+        perturb_quat = np.array(
+            [
+                axis[0] * sin_half_angle,
+                axis[1] * sin_half_angle,
+                axis[2] * sin_half_angle,
+                cos_half_angle,
+            ]
+        )
+
+        # Multiply quaternions to apply perturbation
+        # Quaternion multiplication: q = q_base * q_perturb
+        result = np.zeros(4)
+        result[0] = (
+            base_quat[3] * perturb_quat[0]
+            + base_quat[0] * perturb_quat[3]
+            + base_quat[1] * perturb_quat[2]
+            - base_quat[2] * perturb_quat[1]
+        )
+        result[1] = (
+            base_quat[3] * perturb_quat[1]
+            - base_quat[0] * perturb_quat[2]
+            + base_quat[1] * perturb_quat[3]
+            + base_quat[2] * perturb_quat[0]
+        )
+        result[2] = (
+            base_quat[3] * perturb_quat[2]
+            + base_quat[0] * perturb_quat[1]
+            - base_quat[1] * perturb_quat[0]
+            + base_quat[2] * perturb_quat[3]
+        )
+        result[3] = (
+            base_quat[3] * perturb_quat[3]
+            - base_quat[0] * perturb_quat[0]
+            - base_quat[1] * perturb_quat[1]
+            - base_quat[2] * perturb_quat[2]
+        )
+
+        # Normalize to ensure valid quaternion
+        result /= np.linalg.norm(result)
+
+        return result
+
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         self.step_count = 0
-        self.data.qpos[:] = 0
-        self.data.qvel[:] = 0
-        self.data.ctrl[:] = 0
-        self.data.qpos[0:3] = np.array([0.0, 0.0, 0.15])
-        quat = np.array([1.0, 0.0, 0.0, 0.0])
-        quat[0] += np.random.uniform(-0.1, 0.1)
-        quat /= np.linalg.norm(quat)
-        self.data.qpos[3:7] = quat
+
+        # Fully reset MuJoCo simulation state
+        mujoco.mj_resetData(self.model, self.data)
+
+        # Set initial position and quaternion of the sphere body
+        sphere_body_id = self.model.body("sphere").id
+        sphere_jntadr = self.model.body_jntadr[sphere_body_id]
+        self.data.qpos[sphere_jntadr : sphere_jntadr + 7] = self.sphere_init_qpos
+
+        # Set initial position and quaternion of the robot body
+        robot_body_id = self.model.body("robot").id
+        robot_jntadr = self.model.body_jntadr[robot_body_id]
+        self.data.qpos[robot_jntadr : robot_jntadr + 7] = self.robot_init_qpos
+        # self.data.qpos[robot_jntadr : robot_jntadr + 4] = (
+        #     self._get_random_init_quat()
+        # )
+
+        # Explicitly set all velocities to zero
+        self.data.qvel[:] = 0.0
+
+        # Explicitly set all control inputs (motor torques) to zero
+        self.data.ctrl[:] = 0.0
+
+        # Set target velocity
         if self.randomize_velocity:
             speed = np.random.uniform(0, self.max_speed)
             angle = np.random.uniform(0, 2 * np.pi)
@@ -134,72 +292,53 @@ class SphericalPendulumEnv(gym.Env):
             )
         else:
             self.target_velocity = np.array([0.0, 0.0], dtype=np.float32)
+
+        # Update the simulation to ensure a consistent state
         mujoco.mj_forward(self.model, self.data)
+
         return self._get_obs(), {}
-
-    def angle_between_vectors(self, v1, v2):
-        """
-        Compute the angle in radians between two vectors using NumPy, with output in [0, pi].
-
-        Args:
-            v1 (np.ndarray): First vector
-            v2 (np.ndarray): Second vector
-
-        Returns:
-            float: Angle in radians, in the range [0, pi]
-
-        Raises:
-            ValueError: If either vector has zero magnitude
-        """
-        dot_product = np.dot(v1, v2)
-        norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
-        if norm_product == 0:
-            raise ValueError("One or both vectors have zero magnitude")
-        cos_theta = np.clip(dot_product / norm_product, -1.0, 1.0)
-        return np.arccos(cos_theta)
 
     def step(self, action, target_velocity=None):
         self.step_count += 1
         if target_velocity is not None:
             self.target_velocity = np.array(target_velocity, dtype=np.float32)
 
-        self.data.ctrl[:] = action
+        # Ensure action is 3D and assign to all three motors
+        self.data.ctrl[:3] = np.clip(
+            action, -1.0, 1.0
+        )  # Ensure action is within bounds and assign to motor1, motor2, motor3
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
 
         obs = self._get_obs()
+
         z_axis = obs[:3]  # Normalized z_axis from _get_obs
         angle_deviation = (
             np.arccos(np.clip(z_axis[2], -1, 1)) / np.pi
         )  # Normalize angle deviation to [0, 1]
-
         upright_reward = 1 - angle_deviation
 
-        base_vel = obs[6:9][:2]  # Normalized base velocity (x, y components)
-
-        vel_angle_error = (
-            self.angle_between_vectors(base_vel, self.target_velocity) / np.pi
-        )  # Normalize angle error to [0, 1]
-
+        sphere_linvel = obs[9:12][:2]  # Normalized base velocity (x, y components)
         vel_speed_error = (
-            abs(
-                np.linalg.norm(base_vel * self.max_speed)
-                - np.linalg.norm(self.target_velocity)
-            )
-            / self.max_speed
+            np.linalg.norm(sphere_linvel - self.target_velocity) / self.max_speed
         )
+        velocity_reward = 1 - np.clip(vel_speed_error, 0, 1)
 
-        if angle_deviation < np.pi / 6:
-            vel_angle_reward = 0.2 * (1 - vel_angle_error)
-            vel_speed_reward = 0.1 * (1 - np.clip(vel_speed_error, 0, 1))
-        else:
-            vel_angle_reward = 0
-            vel_speed_reward = 0
-
+        # Update control penalty for 3D action
         control_penalty = -0.1 * np.sum(np.square(action))
 
-        reward = float(2 * upright_reward + vel_angle_reward + vel_speed_reward + control_penalty)
-        terminated = bool(z_axis[2] < 0.1)  # Relaxed termination condition
+        reward = float(upright_reward + velocity_reward + control_penalty)
+
+        terminated = False
+        if z_axis[2] < 0.1:
+            terminated = True
+            reward = -1000
+
+        # Check if robot fell or jumped off the sphere
+        robot_pos = self.data.body("robot").xpos
+        if robot_pos[2] < 0.2:
+            terminated = True
+            reward = -1000
 
         truncated = False
         if self.step_count >= self.max_steps:
@@ -218,8 +357,7 @@ class SphericalPendulumEnv(gym.Env):
             truncated,
             {
                 "upright_reward": upright_reward,
-                "vel_angle_reward": vel_angle_reward,
-                "vel_speed_reward": vel_speed_reward,
+                "velocity_reward": velocity_reward,
                 "control_penalty": control_penalty,
             },
         )
@@ -326,8 +464,8 @@ class PolicyNetwork(nn.Module):
             nn.Linear(hidden_size, act_dim),
             nn.Tanh(),  # Output in [-1, 1]
         )
-        self.actor_log_std = nn.Parameter(torch.zeros(act_dim))  # Learnable log_std
-        self.action_scale = torch.tensor(20.0)  # Scale to [-20, 20]
+        self.actor_log_std = nn.Parameter(-3 * torch.ones(act_dim))  # Learnable log_std
+        self.action_scale = torch.tensor(1.0)  # Scale to [-1, 1]
 
     def forward(self, obs, hidden=None):
         if obs.dim() == 2:
@@ -337,6 +475,7 @@ class PolicyNetwork(nn.Module):
         gru_out, new_hidden = self.gru(obs, hidden)
         mean = self.actor_mean(gru_out) * self.action_scale.to(gru_out.device)
         log_std = self.actor_log_std.expand_as(mean)
+        log_std = torch.clamp(log_std, -20, -1)
         std = torch.exp(log_std)
         return mean, std, new_hidden
 
@@ -380,7 +519,7 @@ class CustomSAC:
         batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.5,
+        alpha=0.05,
         hidden_size=32,
         num_layers=1,
         seq_len=100,
@@ -389,7 +528,7 @@ class CustomSAC:
         self.env = env
         self.learning_rate = learning_rate
         self.obs_dim = env.observation_space.shape[0]
-        self.act_dim = env.action_space.shape[0]
+        self.act_dim = env.action_space.shape[0]  # Now 3 for three motors
         self.buffer_size = buffer_size
         self.batch_size = batch_size
         self.gamma = gamma
@@ -617,14 +756,13 @@ if __name__ == "__main__":
         env,
         learning_rate=1e-4,
         buffer_size=100_000,
-        batch_size=128,
+        batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.3,
+        alpha=0.001,
         hidden_size=32,
         num_layers=1,
         seq_len=32,
-        device="cpu",
     )
     run = wandb.init(
         project="spherical-pendulum",

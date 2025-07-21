@@ -6,7 +6,7 @@ import mujoco.viewer
 import time
 
 # Create the environment
-env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5)
+env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5, max_steps=2000)
 
 # Initialize the policy network
 obs_dim = env.observation_space.shape[0]
@@ -25,7 +25,7 @@ model = CustomSAC(
     env,
     learning_rate=1e-4,
     buffer_size=1000000,
-    batch_size=128,
+    batch_size=256,
     gamma=0.99,
     tau=0.005,
     alpha=0.2,
@@ -56,13 +56,13 @@ try:
         # Initialize timing
         start_time = time.time()
 
-        for t in range(10000):
+        for t in range(50000):
             # Get current time
             current_time = time.time()
             elapsed_time = current_time - start_time
 
             # Predict with custom SAC policy
-            action, hidden = model.predict(obs, hidden=hidden, deterministic=False)
+            action, hidden = model.predict(obs, hidden=hidden, deterministic=True)
 
             # Step the environment
             obs, reward, terminated, truncated, info = env.step(

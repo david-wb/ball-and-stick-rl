@@ -1,16 +1,14 @@
 # ball-and-stick-rl
 
-<img src="static/robot_on_ball.gif" alt="Ball and Stick" width="1000">
-
-<!-- <video src="static/ball_and_stick.mp4" controls="controls" style="max-width: 730px;" autoplay="autoplay">
-</video> -->
+<img src="static/robot_on_ball.gif" alt="Robot on Sphere" width="1000">
 
 # Overview
 
-This repo uses the SAC algorithm to train an agent to balance an inverted pendulum riding on top of a rolling sphere. The agent must
-control the torques of motors riding on top of the sphere to keep the pendulum upright, while also maintaining a target linear velocity. The `main` branch trains a simplified ball-and-stick model while the `anisotropic_friction` branch trains a more realistic model shown in the gif above.
+This repo uses the SAC algorithm to train an robot to balance on top of a rolling sphere while tracking a target velocity. The robot is essentially an inverted pendulum with three omni-directional wheels in contact with the sphere. The agent must control the three motor torques to keep the pendulum upright and track the target velocity.
 
 # Setup
+
+This currently repo depends on a [fork of MuJoCo](https://github.com/david-wb/mujoco) which contains a small change to support anisotropic friction for the omni-wheels in contact with the sphere. You'll first need to clone and build the fork, including the python bindings, and then install them into the poetry environment of this repo with `poetry add <path to python sdist>`.
 
 Install dependencies with `poetry`
 
@@ -42,10 +40,6 @@ To launch the MuJoCoviewer and imported the ball-and-stick, run
 ./viewer.sh
 ```
 
-# Notes
-
-The PPO algorithm was also implemented but it does not work well (as implemented anyway).
-
 # Training Metrics
 
 The training metrics are logged to https://wanb.ai
@@ -54,8 +48,8 @@ For SAC they look something like this:
 
 <img src="static/training_metrics.png" alt="SAC Metrics" width="600">
 
-# In Progress
+# Notes
 
-Working on a more realistic model with omni-wheels in contact with the sphere...
-
-<img src="static/model.png" alt="Model" width="300">
+The PPO algorithm was also tested but it did not work well (as implemented anyway).
+The SAC algorithm does learn to balance but current plateaus at a sub-optimal performance level
+and has difficulty learning to track the target velocity.
