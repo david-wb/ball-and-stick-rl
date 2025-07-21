@@ -16,7 +16,8 @@ dependencies = [
     "torch (>=2.7.1,<3.0.0)",
     "torch-vision (>=0.1.6.dev0,<0.2.0)",
     "sb3-contrib (>=2.6.0,<3.0.0)",
-    "mujoco @ file:///home/david/code/mujoco/python/dist/mujoco-3.3.5.tar.gz",
+    "mujoco @ file:///Users/david/code/mujoco/python/dist/mujoco-3.3.5.tar.gz",
+    "black (>=25.1.0,<26.0.0)",
 ]
 
 
