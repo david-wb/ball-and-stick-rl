@@ -126,8 +126,8 @@ class SphericalPendulumEnv(gym.Env):
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
         obs_size = (
-            3 + 3 + 3 + 3 + 3 + 3 + 2 + 3
-        )  # z_axis, pendulum_gyro, pendulum_accel, sphere_linvel, sphere_gyro, sphere_accel, target_velocity, motor_speeds
+            4 + 3 + 3 + 3 + 3 + 3 + 2 + 3
+        )  # pendulum_quat, pendulum_gyro, pendulum_accel, sphere_linvel, sphere_gyro, sphere_accel, target_velocity, motor_speeds
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float32
         )
@@ -160,15 +160,17 @@ class SphericalPendulumEnv(gym.Env):
             original_qpos = None
         return original_qpos
 
-    def _get_obs(self):
-        # Read pendulum quaternion to compute z-axis projection
-        quat = self.data.sensor("pendulum_angle").data
+    def _quat_to_z_axis(self, quat):
         w, x, y, z = quat
-        pendulum_z_axis = np.array(
+        z_axis = np.array(
             [2 * (x * z + w * y), 2 * (y * z - w * x), 1 - 2 * (x * x + y * y)]
         )
-        pendulum_z_axis /= np.linalg.norm(pendulum_z_axis)
+        z_axis /= np.linalg.norm(z_axis)
+        return z_axis
 
+    def _get_obs(self):
+        # Read pendulum quaternion to compute z-axis projection
+        pendulum_quat = self.data.sensor("pendulum_angle").data
         pendulum_gyro = self.data.sensor("pendulum_gyro").data
         pendulum_accel = self.data.sensor("pendulum_accel").data
 
@@ -188,7 +190,7 @@ class SphericalPendulumEnv(gym.Env):
         # Concatenate observation vector
         obs = np.concatenate(
             [
-                pendulum_z_axis,
+                pendulum_quat,
                 pendulum_gyro,
                 pendulum_accel,
                 sphere_linear_velocity,
@@ -312,13 +314,14 @@ class SphericalPendulumEnv(gym.Env):
 
         obs = self._get_obs()
 
-        z_axis = obs[:3]  # Normalized z_axis from _get_obs
+        pendulum_quat = obs[:4]
+        z_axis = self._quat_to_z_axis(pendulum_quat)
         angle_deviation = (
             np.arccos(np.clip(z_axis[2], -1, 1)) / np.pi
         )  # Normalize angle deviation to [0, 1]
         upright_reward = 1 - angle_deviation
 
-        sphere_linvel = obs[9:12][:2]  # Normalized base velocity (x, y components)
+        sphere_linvel = obs[10:13][:2]  # Normalized base velocity (x, y components)
         vel_speed_error = (
             np.linalg.norm(sphere_linvel - self.target_velocity) / self.max_speed
         )
