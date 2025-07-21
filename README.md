@@ -1,6 +1,6 @@
 # ball-and-stick-rl
 
-<img src="static/ball_and_stick.gif" alt="Ball and Stick" width="1000">
+<img src="static/robot_on_ball.gif" alt="Ball and Stick" width="1000">
 
 <!-- <video src="static/ball_and_stick.mp4" controls="controls" style="max-width: 730px;" autoplay="autoplay">
 </video> -->
@@ -8,7 +8,7 @@
 # Overview
 
 This repo uses the SAC algorithm to train an agent to balance an inverted pendulum riding on top of a rolling sphere. The agent must
-control the xy torques on the sphere to keep the pendulum upright, while also maintaining a target linear velocity.
+control the torques of motors riding on top of the sphere to keep the pendulum upright, while also maintaining a target linear velocity. The `main` branch trains a simplified ball-and-stick model while the `anisotropic_friction` branch trains a more realistic model shown in the gif above.
 
 # Setup
 
