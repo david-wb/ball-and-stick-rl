@@ -11,7 +11,7 @@ env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5, max_steps=20
 # Initialize the policy network
 obs_dim = env.observation_space.shape[0]
 act_dim = env.action_space.shape[0]
-policy = PolicyNetwork(obs_dim, act_dim, hidden_size=64, num_layers=1)
+policy = PolicyNetwork(obs_dim, act_dim, hidden_size=32, num_layers=1)
 
 # Load the trained model
 checkpoint_path = "checkpoints/model_sac.pt"  # Path to SAC checkpoint
@@ -29,7 +29,7 @@ model = CustomSAC(
     gamma=0.99,
     tau=0.005,
     alpha=0.2,
-    hidden_size=64,
+    hidden_size=32,
     num_layers=1,
     device="cpu",
 )

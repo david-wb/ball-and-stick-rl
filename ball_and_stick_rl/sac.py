@@ -33,12 +33,12 @@ MUJOCO_XML = """
         <geom name="floor" type="plane" material="checker_mat" size="10 10 0.1"/>
         <body name="base" pos="0 0 0.15">
             <freejoint name="base_free"/>
-            <geom name="base_sphere" type="sphere" size="0.15" mass="20" rgba="0.4 0.5 0.6 0.5" />
+            <geom name="base_sphere" type="sphere" size="0.15" mass="15" rgba="0.4 0.5 0.6 0.5" />
         </body>
-        <body name="wheel_base" pos="0 0 0.32">
+        <body name="wheel_base" pos="0 0 0.35">
             <freejoint name="wheel_base_free"/>
             <!-- Robot Chassis -->
-            <geom name="chassis_geom" type="cylinder" size="0.15 0.01" material="robot_mat" mass="1.0" rgba="1 0.5 0 0.5"/>
+            <geom name="chassis_geom" type="cylinder" size="0.15 0.01" material="robot_mat" mass="5.0" rgba="1 0.5 0 0.5"/>
             <!-- Vertical pendulum -->
             <body name="pendulum" pos="0 0 0.3">
                 <geom name="rod_geom" type="cylinder" size="0.01 0.3" rgba="1 0.2 0 0.5" mass="0.2"/>
@@ -67,6 +67,10 @@ MUJOCO_XML = """
         <framequat name="pendulum_angle" objtype="body" objname="pendulum"/>
         <frameangvel name="pendulum_angular_velocity" objtype="body" objname="pendulum"/>
         <framelinvel name="base_linear_velocity" objtype="body" objname="base"/>
+        <frameangvel name="base_angular_velocity" objtype="body" objname="base"/>
+        <jointvel joint="wheel1_joint" name="wheel1_velocity"/>
+        <jointvel joint="wheel2_joint" name="wheel2_velocity"/>
+        <jointvel joint="wheel3_joint" name="wheel3_velocity"/>
     </sensor>
     <actuator>
         <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
@@ -112,7 +116,9 @@ class SphericalPendulumEnv(gym.Env):
         # Updated action space to 3 dimensions for 3 motors
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
 
-        obs_size = 3 + 3 + 3 + 2  # z_axis, ang_vel, base_vel, target_velocity
+        obs_size = (
+            3 + 3 + 3 + 3 + 2 + 3
+        )  # z_axis, ang_vel, base_lin_vel, base_ang_vel, target_velocity, motor_speeds
         self.observation_space = spaces.Box(
             low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float32
         )
@@ -132,13 +138,26 @@ class SphericalPendulumEnv(gym.Env):
         pend_ang_vel = self.data.sensor("pendulum_angular_velocity").data
         # Read base linear velocity
         base_lin_vel = self.data.sensor("base_linear_velocity").data
+        base_ang_vel = self.data.sensor("base_angular_velocity").data
+        # Read motor angular velocities (wheel joints)
+        motor_speeds = np.array(
+            [
+                *self.data.sensor("wheel1_velocity").data,
+                *self.data.sensor("wheel2_velocity").data,
+                *self.data.sensor("wheel3_velocity").data,
+            ],
+            dtype=np.float32,
+        )
+
         # Concatenate observation vector
         obs = np.concatenate(
             [
                 z_axis / np.linalg.norm(z_axis),  # Normalized pendulum z-axis
-                pend_ang_vel / 1.0,  # Normalized pendulum angular velocity
+                pend_ang_vel,  # pendulum angular velocity
                 base_lin_vel / self.max_speed,  # Normalized base linear velocity
+                base_ang_vel,  # Normalized base angular velocity
                 self.target_velocity / self.max_speed,  # Normalized target velocity
+                motor_speeds,
             ]
         )
         return obs.astype(np.float32)
@@ -179,28 +198,6 @@ class SphericalPendulumEnv(gym.Env):
         mujoco.mj_forward(self.model, self.data)
 
         return self._get_obs(), {}
-
-    def angle_between_vectors(self, v1, v2):
-        """
-        Compute the angle in radians between two vectors using NumPy, with output in [0, pi].
-
-        Args:
-            v1 (np.ndarray): First vector
-            v2 (np.ndarray): Second vector
-
-        Returns:
-            float: Angle in radians, in the range [0, pi]
-
-        Raises:
-            ValueError: If either vector has zero magnitude
-        """
-        dot_product = np.dot(v1, v2)
-        norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
-        if norm_product == 0:
-            return np.pi  # If either vector is zero, return pi (angle is undefined)
-            raise ValueError("One or both vectors have zero magnitude")
-        cos_theta = np.clip(dot_product / norm_product, -1.0, 1.0)
-        return np.arccos(cos_theta)
 
     def step(self, action, target_velocity=None):
         self.step_count += 1
@@ -668,8 +665,8 @@ if __name__ == "__main__":
         batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.1,
-        hidden_size=64,
+        alpha=0.001,
+        hidden_size=32,
         num_layers=1,
         seq_len=32,
     )
