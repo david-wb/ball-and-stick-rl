@@ -4,7 +4,7 @@
 
 # Overview
 
-This repo uses the SAC algorithm to train an robot to balance on top of a rolling sphere while tracking a target velocity. The robot is essentially an inverted pendulum with three omni-directional wheels in contact with the sphere. The agent must control the three motor torques to keep the pendulum upright and track the target velocity.
+This repo uses the SAC algorithm to train a robot to balance on top of a rolling sphere while tracking a target velocity. The robot is essentially an inverted pendulum with three omni-directional wheels in contact with the sphere. The agent must control the three motor torques to keep the pendulum upright and track the target velocity.
 
 # Setup
 
