@@ -1,4 +1,4 @@
-# ball-and-stick-rl
+(# ball-and-stick-rl
 
 <img src="static/robot_on_ball.gif" alt="Robot on Sphere" width="1000">
 
@@ -8,7 +8,7 @@ This repo uses the SAC algorithm to train a robot to balance on top of a rolling
 
 # Setup
 
-This currently repo depends on a [fork of MuJoCo](https://github.com/david-wb/mujoco) which contains a [small change](https://github.com/google-deepmind/mujoco/pull/2751) to support anisotropic friction for the omni-wheels in contact with the sphere. You'll first need to clone and build the fork, including the python bindings, and then edit the absolute path to the `mujoco-3.3.5.tar.gz` in the `pyproject.toml` file.
+This repo depends on a [fork of MuJoCo](https://github.com/david-wb/mujoco) which contains a [small change](https://github.com/google-deepmind/mujoco/pull/2751) to support anisotropic friction for the omni-wheels in contact with the sphere. You'll first need to clone and build the fork, including the python bindings, and then edit the absolute path to the `mujoco-3.3.5.tar.gz` in the `pyproject.toml` file.
 
 Install dependencies with `poetry`
 
