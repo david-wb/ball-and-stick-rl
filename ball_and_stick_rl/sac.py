@@ -71,15 +71,15 @@ MUJOCO_XML = """
         <accelerometer name="pendulum_accel" site="pendulum_imu_site"/>
         <framelinvel name="sphere_linear_velocity" objtype="body" objname="sphere"/>
         <gyro name="sphere_gyro" site="sphere_imu_site"/>
-        <accelerometer name="sphere_accel" site="pendulum_imu_site"/>
+        <accelerometer name="sphere_accel" site="sphere_imu_site"/>
         <jointvel joint="wheel1_joint" name="wheel1_velocity"/>
         <jointvel joint="wheel2_joint" name="wheel2_velocity"/>
         <jointvel joint="wheel3_joint" name="wheel3_velocity"/>
     </sensor>
     <actuator>
-        <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
-        <motor name="motor2" joint="wheel2_joint" ctrlrange="-1 1"/>
-        <motor name="motor3" joint="wheel3_joint" ctrlrange="-1 1"/>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-2 2"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-2 2"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-2 2"/>
     </actuator>
     <contact>
         <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
@@ -105,6 +105,7 @@ class SphericalPendulumEnv(gym.Env):
         render_mode=None,
         max_steps: int = 1024,
         max_speed: float = 0.5,
+        action_scale: float = 1.0,
         randomize_velocity=True,
     ):
         super().__init__()
@@ -113,6 +114,7 @@ class SphericalPendulumEnv(gym.Env):
         self.max_speed = max_speed
         self.randomize_velocity = randomize_velocity
         self.target_velocity = np.array([0.0, 0.0], dtype=np.float32)
+        self.action_scale = action_scale
 
         self.model = mujoco.MjModel.from_xml_path(xml_file)
         self.data = mujoco.MjData(self.model)
@@ -123,7 +125,9 @@ class SphericalPendulumEnv(gym.Env):
         self.init_quat = np.array([1.0, 0.0, 0.0, 0.0])  # Default quaternion (identity)
 
         # Updated action space to 3 dimensions for 3 motors
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(3,), dtype=np.float32)
+        self.action_space = spaces.Box(
+            low=-action_scale, high=action_scale, shape=(3,), dtype=np.float32
+        )
 
         obs_size = (
             4 + 3 + 3 + 3 + 3 + 3 + 2 + 3
@@ -307,7 +311,7 @@ class SphericalPendulumEnv(gym.Env):
 
         # Ensure action is 3D and assign to all three motors
         self.data.ctrl[:3] = np.clip(
-            action, -1.0, 1.0
+            action, -self.action_scale, self.action_scale
         )  # Ensure action is within bounds and assign to motor1, motor2, motor3
         for _ in range(self.frame_skip):
             mujoco.mj_step(self.model, self.data)
@@ -328,7 +332,7 @@ class SphericalPendulumEnv(gym.Env):
         velocity_reward = 1 - np.clip(vel_speed_error, 0, 1)
 
         # Update control penalty for 3D action
-        control_penalty = -0.1 * np.sum(np.square(action))
+        control_penalty = -10 * np.sum(np.square(action))
 
         reward = float(upright_reward + velocity_reward + control_penalty)
 
@@ -450,36 +454,38 @@ class ReplayBuffer:
 
 
 class PolicyNetwork(nn.Module):
-    def __init__(self, obs_dim, act_dim, hidden_size=32, num_layers=1):
+    def __init__(
+        self, *, obs_dim, act_dim, action_scale, hidden_size=256, num_layers=2
+    ):
         super(PolicyNetwork, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-
-        # GRU layer for processing sequential observations
         self.gru = nn.GRU(obs_dim, hidden_size, num_layers, batch_first=True)
         self.actor_mean = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
+            nn.Linear(hidden_size, act_dim),
+            nn.Tanh(),
+        )
+        self.actor_std = nn.Sequential(
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, act_dim),
-            nn.Tanh(),  # Output in [-1, 1]
+            nn.Softplus(),
         )
-        self.actor_log_std = nn.Parameter(-3 * torch.ones(act_dim))  # Learnable log_std
-        self.action_scale = torch.tensor(1.0)  # Scale to [-1, 1]
+        self.action_scale = torch.tensor(action_scale)
 
     def forward(self, obs, hidden=None):
         if obs.dim() == 2:
-            obs = obs.unsqueeze(1)  # Add sequence dimension: (batch_size, 1, obs_dim)
+            obs = obs.unsqueeze(1)
         if hidden is None:
             hidden = self.init_hidden(obs.size(0)).to(obs.device)
-        gru_out, new_hidden = self.gru(obs, hidden)
+        gru_out, new_hidden = self.gru(obs, hidden.contiguous())
         mean = self.actor_mean(gru_out) * self.action_scale.to(gru_out.device)
-        log_std = self.actor_log_std.expand_as(mean)
-        log_std = torch.clamp(log_std, -20, -1)
-        std = torch.exp(log_std)
+        std = self.actor_std(gru_out)
+        std = torch.clamp(std, 0, 1)
         return mean, std, new_hidden
 
     def init_hidden(self, batch_size=1):
@@ -544,7 +550,11 @@ class CustomSAC:
 
         # Initialize networks
         self.policy = PolicyNetwork(
-            self.obs_dim, self.act_dim, hidden_size, num_layers
+            obs_dim=self.obs_dim,
+            act_dim=self.act_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            action_scale=env.action_scale,
         ).to(self.device)
         self.q1 = QNetwork(self.obs_dim, self.act_dim, hidden_size).to(self.device)
         self.q2 = QNetwork(self.obs_dim, self.act_dim, hidden_size).to(self.device)
@@ -554,6 +564,10 @@ class CustomSAC:
         self.target_q2 = QNetwork(self.obs_dim, self.act_dim, hidden_size).to(
             self.device
         )
+        self.log_alpha = torch.tensor(
+            [np.log(self.alpha)], requires_grad=True, device=self.device
+        )
+        self.target_entropy = -self.act_dim  # Common heuristic: -|A|
 
         # Initialize target networks
         self.target_q1.load_state_dict(self.q1.state_dict())
@@ -563,6 +577,7 @@ class CustomSAC:
         self.policy_optimizer = optim.Adam(self.policy.parameters(), lr=learning_rate)
         self.q1_optimizer = optim.Adam(self.q1.parameters(), lr=learning_rate)
         self.q2_optimizer = optim.Adam(self.q2.parameters(), lr=learning_rate)
+        self.alpha_optimizer = optim.Adam([self.log_alpha], lr=1e-4)
 
         # Replay buffer
         self.replay_buffer = ReplayBuffer(
@@ -602,8 +617,12 @@ class CustomSAC:
                 obs_tensor = torch.FloatTensor(obs).to(self.device).unsqueeze(0)
                 mean, std, next_hidden = self.policy(obs_tensor, hidden)
                 dist = Normal(mean, std)
-                action = dist.sample()
-                action_np = action.cpu().detach().numpy()[0]
+                action = torch.clamp(
+                    dist.sample(), -self.env.action_scale, self.env.action_scale
+                )
+                action_np = action.cpu().detach().numpy()[0, 0]
+                mean_np = mean.cpu().detach().numpy()[0, 0]
+                std_np = std.cpu().detach().numpy()[0, 0]
                 next_obs, reward, terminated, truncated, info = self.env.step(action_np)
                 done = terminated
 
@@ -622,8 +641,15 @@ class CustomSAC:
             # Log metrics
             wandb.log(
                 {
-                    "action_mean": np.mean(action_np),
-                    "action_std": np.std(action_np),
+                    "action_1": action_np[0],
+                    "action_2": action_np[1],
+                    "action_3": action_np[2],
+                    "action_std_1": std_np[0],
+                    "action_std_2": std_np[1],
+                    "action_std_3": std_np[2],
+                    "action_mean_1": mean_np[0],
+                    "action_mean_2": mean_np[1],
+                    "action_mean_3": mean_np[2],
                     "obs_mean": np.mean(obs),
                     "obs_std": np.std(obs),
                     "timestep": timestep,
@@ -690,9 +716,13 @@ class CustomSAC:
             next_mean, next_std, _ = self.policy(batch_next_obs, batch_next_hidden)
             next_dist = Normal(next_mean, next_std)
             next_action = next_dist.sample()
+            # log prob should use the unclamped action!
+            next_action_clamped = torch.clamp(
+                next_action, -self.env.action_scale, self.env.action_scale
+            )
             next_log_prob = next_dist.log_prob(next_action).sum(dim=-1, keepdim=True)
-            target_q1 = self.target_q1(batch_next_obs, next_action)
-            target_q2 = self.target_q2(batch_next_obs, next_action)
+            target_q1 = self.target_q1(batch_next_obs, next_action_clamped)
+            target_q2 = self.target_q2(batch_next_obs, next_action_clamped)
             target_q = torch.min(target_q1, target_q2) - self.alpha * next_log_prob
 
             # Compute target Q-values with uniform discounting
@@ -707,24 +737,39 @@ class CustomSAC:
 
         self.q1_optimizer.zero_grad()
         q1_loss.backward()
+        nn.utils.clip_grad_norm_(self.q1.parameters(), max_norm=1.0)
         self.q1_optimizer.step()
 
         self.q2_optimizer.zero_grad()
         q2_loss.backward()
+        nn.utils.clip_grad_norm_(self.q2.parameters(), max_norm=1.0)
         self.q2_optimizer.step()
 
         # Policy update
         mean, std, _ = self.policy(batch_obs, batch_hidden)
         dist = Normal(mean, std)
         action = dist.rsample()
+        action_clamped = torch.clamp(
+            action, -self.env.action_scale, self.env.action_scale
+        )
         log_prob = dist.log_prob(action).sum(dim=-1, keepdim=True)
-        q1_pi = self.q1(batch_obs, action)
-        q2_pi = self.q2(batch_obs, action)
+        q1_pi = self.q1(batch_obs, action_clamped)
+        q2_pi = self.q2(batch_obs, action_clamped)
         q_pi = torch.min(q1_pi, q2_pi)
         policy_loss = ((self.alpha * log_prob - q_pi) * batch_mask.unsqueeze(-1)).mean()
 
+        # alpha update
+        alpha_loss = -(
+            self.log_alpha.exp() * (log_prob + self.target_entropy).detach()
+        ).mean()
+        self.alpha_optimizer.zero_grad()
+        alpha_loss.backward()
+        self.alpha_optimizer.step()
+        self.alpha = self.log_alpha.exp().item()
+
         self.policy_optimizer.zero_grad()
         policy_loss.backward()
+        nn.utils.clip_grad_norm_(self.policy.parameters(), max_norm=1.0)
         self.policy_optimizer.step()
 
         # Update target networks
@@ -754,7 +799,10 @@ class CustomSAC:
 
 if __name__ == "__main__":
     # Training
-    env = SphericalPendulumEnv(max_steps=2048, randomize_velocity=True)
+    action_scale = 2.0
+    env = SphericalPendulumEnv(
+        max_steps=4096, randomize_velocity=True, action_scale=action_scale
+    )
     model = CustomSAC(
         env,
         learning_rate=1e-4,
@@ -762,7 +810,7 @@ if __name__ == "__main__":
         batch_size=256,
         gamma=0.99,
         tau=0.005,
-        alpha=0.001,
+        alpha=0.2,
         hidden_size=32,
         num_layers=1,
         seq_len=32,

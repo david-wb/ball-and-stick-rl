@@ -6,12 +6,20 @@ import mujoco.viewer
 import time
 
 # Create the environment
-env = SphericalPendulumEnv(randomize_velocity=False, max_speed=0.5, max_steps=2000)
+env = SphericalPendulumEnv(
+    randomize_velocity=False, max_speed=0.5, max_steps=2000, action_scale=2.0
+)
 
 # Initialize the policy network
 obs_dim = env.observation_space.shape[0]
 act_dim = env.action_space.shape[0]
-policy = PolicyNetwork(obs_dim, act_dim, hidden_size=32, num_layers=1)
+policy = PolicyNetwork(
+    obs_dim=obs_dim,
+    act_dim=act_dim,
+    hidden_size=32,
+    num_layers=1,
+    action_scale=env.action_scale,
+)
 
 # Load the trained model
 checkpoint_path = "checkpoints/model_sac.pt"  # Path to SAC checkpoint

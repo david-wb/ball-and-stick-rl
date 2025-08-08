@@ -55,15 +55,15 @@
         <accelerometer name="pendulum_accel" site="pendulum_imu_site"/>
         <framelinvel name="sphere_linear_velocity" objtype="body" objname="sphere"/>
         <gyro name="sphere_gyro" site="sphere_imu_site"/>
-        <accelerometer name="sphere_accel" site="pendulum_imu_site"/>
+        <accelerometer name="sphere_accel" site="sphere_imu_site"/>
         <jointvel joint="wheel1_joint" name="wheel1_velocity"/>
         <jointvel joint="wheel2_joint" name="wheel2_velocity"/>
         <jointvel joint="wheel3_joint" name="wheel3_velocity"/>
     </sensor>
     <actuator>
-        <motor name="motor1" joint="wheel1_joint" ctrlrange="-1 1"/>
-        <motor name="motor2" joint="wheel2_joint" ctrlrange="-1 1"/>
-        <motor name="motor3" joint="wheel3_joint" ctrlrange="-1 1"/>
+        <motor name="motor1" joint="wheel1_joint" ctrlrange="-2 2"/>
+        <motor name="motor2" joint="wheel2_joint" ctrlrange="-2 2"/>
+        <motor name="motor3" joint="wheel3_joint" ctrlrange="-2 2"/>
     </actuator>
     <contact>
         <!-- Anisotropic friction: zero along wheel z-axis, non-zero for theta -->
